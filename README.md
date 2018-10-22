@@ -31,11 +31,12 @@ where it will work with ZACL unmodified.
 But as long as there are discrepancies between what works with zacl
 and the [official Franz version of
 aserve](https://github.com/franzinc/aserve/) (as is the case
-currently), a zacl-compatible fork will be available
-[here](https://github.com/genworks/aserve/tree/zacl-compatible).  You
-can check it out like so:
+currently), a zacl-compatible fork will be available on the default
+branch [here](https://github.com/gendl/aserve).  This will hopefully
+be available in Quicklisp soon under the name `"zaserve"`, and in the
+meantime you can check it out like so:
 
-    git clone -b master https://github.com/genworks/aserve.git
+    git clone -b master https://github.com/gendl/aserve.git
 
 ## Usage
 
@@ -44,53 +45,74 @@ legacy [attempt to port
 AllegroServe](https://sourceforge.net/p/portableaserve/git/ci/master/tree/)
 
 Therefore, the [zacl-compatible
-AllegroServe](https://github.com/genworks/aserve/tree/zacl-compatible)
-has its system name as  `zaserve`. This `zaserve` system definition
-includes a dependency on ZACL, so you can load it simply by invoking
+AllegroServe](https://github.com/gendl/aserve) has its system name as
+`zaserve`. This `zaserve` system definition includes a dependency on
+ZACL, so when it's available in Quicklisp (hopefully November 2018),
+you can load it simply by invoking
 
-    (ql:quickload :zaserve)
+    (ql:quickload "zaserve")
 
 Of course, if for some reason you only want the `zacl` system itself,
 you can load that with
 
-    (ql:quickload :zacl)
+    (ql:quickload "zacl")
+
+
+**NOTE** As of this writing, `"zaserve"` and this up to date `"zacl"`
+  are not yet available in Quicklisp. It is hoped that they will be
+  available starting with the November 2018 update. In the meantime,
+  you can clone both repositories into your
+  `quicklisp/local-projects/` directory and `ql:quickload` them from
+  there:
+
+    git clone -b master https://gitlab.common-lisp.net/zbeane/zacl.git
+    git clone -b master https://github.com/gendl/aserve.git
+
 
 
 ## Limitations
 
 **Only works on Clozure CL and SBCL**. Support for other
-implementations may be added if there is sufficient
-demand. Contributions of ports to other implementations are of course
-welcome
+  implementations may be added if there is sufficient
+  demand. Contributions of ports to other implementations are of
+  course welcome
 
 **Does not support CGI**. A victim of time constraints. The author and
-maintainers do not currently need CGI. CGI functionality requires
-non-trivial support for managing subprocesses, and I am not sure if
-e.g. UIOP's subprocess management API is sufficient.
+  maintainers do not currently need CGI. CGI functionality requires
+  non-trivial support for managing subprocesses, and I am not sure if
+  e.g. UIOP's subprocess management API is sufficient.
+
+**Does not support zlib compression**. Another victim of time
+  constraints. This is still desired, so if you are interested in the
+  feature or interested in collaborating on implementating it, please
+  contact the maintainer or lodge [an
+  Issue](https://gitlab.common-lisp.net/zbeane/zacl/issues) and/or a
+  [Merge Request](https://gitlab.common-lisp.net/zbeane/zacl/merge_requests).
 
 **Lightly tested**. Our applications seem to work. Yours might not. If
-you have trouble with ZACL and zaserve, feel free to create an
-issue[here](https://gitlab.common-lisp.net/zbeane/zacl/issues) and/or
-[here](https://github.com/genworks/aserve/tree/zacl-compatible) and
-the maintainers will see them.
+  you have trouble with ZACL and zaserve, feel free to create an
+  issue[here](https://gitlab.common-lisp.net/zbeane/zacl/issues)
+  and/or
+  [here](https://github.com/gendl/aserve) and
+  the maintainers will see them.
 
 **Possibly slow**. Using generic functions and portability layers will
-be slower than running aserve natively on Allegro CL. There aren't
-many ways around it. If you do have a specific performance issue when
-running with ZACL that you would like to see ZACL try to address, then
-please [open an
-Issue](https://gitlab.common-lisp.net/zbeane/zacl/issues) or [get in
-touch](mailto:xach@xach.com).
+  be slower than running aserve natively on Allegro CL. There aren't
+  many ways around it. If you do have a specific performance issue
+  when running with ZACL that you would like to see ZACL try to
+  address, then please [open an
+  Issue](https://gitlab.common-lisp.net/zbeane/zacl/issues) or [get in
+  touch](mailto:xach@xach.com).
 
-With that said, AllegroServe will always run best on its native
-platform, which is [Allegro
-CL](https://franz.com/products/allegro-common-lisp/). So if you want
-to run AllegroServe for mission-critical or performance-critical
-applications, and with a guarantee of a supported, trouble-free
-experience, then you may want to consider investing [Allegro
-CL](https://franz.com/products/allegro-common-lisp/) for your
-AllegroServe needs. This option also comes with the benefit of
-dedicated, world-class [support from Franz
-Inc. engineers](https://franz.com).
+  With that said, AllegroServe will always run best on its native
+  platform, which is [Allegro
+  CL](https://franz.com/products/allegro-common-lisp/). So if you want
+  to run AllegroServe for mission-critical or performance-critical
+  applications, and with a guarantee of a supported, trouble-free
+  experience, then you may want to consider investing [Allegro
+  CL](https://franz.com/products/allegro-common-lisp/) for your
+  AllegroServe needs. This option also comes with the benefit of
+  dedicated, world-class [support from Franz
+  Inc. engineers](https://franz.com).
 
 
