@@ -1,4 +1,4 @@
-;;;; ccl.lisp
+;;;; clasp-specific.lisp
 
 (in-package #:zacl)
 
