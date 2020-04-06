@@ -28,7 +28,9 @@
                (:file "clozure-specific")
                #+sbcl
                (:file "sbcl-specific")
-               #-clozure
+               #+clasp
+               (:file "clasp-specific")
+               #-(or clasp clozure)
                (:file "portable-process")
                #+clozure
                (:file "clozure-process")
@@ -38,7 +40,8 @@
                (:file "if-star")
                (:file "package-excl")
                (:file "package-sys")
-               (:file "package-mp")
+               #+clasp (:file "package-mp-clasp")
+               #-clasp (:file "package-mp")
                (:file "package-socket")
                (:file "package-si")
                (:file "package-ff")

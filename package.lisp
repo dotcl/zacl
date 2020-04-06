@@ -337,6 +337,7 @@ package name.
 (defpackage #:net.html.generator
   (:use))
 
+#-clasp
 (defpackage #:mp
   (:use)
   (:import-from #:sys
@@ -372,6 +373,43 @@ package name.
            #:process-thread
            #:*current-process*))
 
+#+clasp
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (let ((strings '("QUEUE"
+                   "ENQUEUE"
+                   "DEQUEUE"
+                   "WITH-TIMEOUT"
+                   "WITHOUT-SCHEDULING"
+                   "MAKE-GATE"
+                   "OPEN-GATE"
+                   "CLOSE-GATE"
+                   "GATE-OPEN-P"
+                   "MAKE-PROCESS-LOCK"
+                   "WITH-PROCESS-LOCK"
+                   "PROCESS-LOCK"
+                   "WAIT-FOR-INPUT-AVAILABLE"
+                   "PROCESS-WAIT"
+                   "PROCESS-WAIT-WITH-TIMEOUT"
+                   "PROCESS-RESET"
+                   "PROCESS-ALLOW-SCHEDULE"
+                   "PROCESS-RUN-FUNCTION"
+                   "PROCESS-KEEPS-LISP-ALIVE-P"
+                   "PROCESS-PRESET"
+                   "PROCESS-PROPERTY-LIST"
+                   "PROCESS-RUN-REASONS"
+                   "PROCESS-ADD-RUN-REASON"
+                   "PROCESS-REVOKE-RUN-REASON"
+                   "PROCESS-THREAD"
+                   "MAKE-PROCESS-RUN-FUNCTION-ALLEGRO"
+                   "MAKE-PROCESS-ALLEGRO")))
+    (dolist (string strings)
+      (intern string (find-package :mp)))   
+    (export 
+     (mapcar #'(lambda(string)
+                  (find-symbol string (find-package :mp)))
+              strings)
+     (find-package :mp))))
+  
 (defpackage #:si
   (:use)
   (:export #:without-scheduling

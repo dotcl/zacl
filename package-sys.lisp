@@ -4,7 +4,9 @@
 
 (defvar sys:*tilde-expand-namestrings* nil)
 
-(define-symbol-macro sys:*current-process* (current-process))
+(define-symbol-macro sys:*current-process*
+    #+clasp (bt:current-thread)
+    #-clasp (current-process))
 
 (defun sys::thread-bindstack-index (&rest args)
   (declare (ignore args))

@@ -16,8 +16,8 @@
   (format t "; (setgid ~D) -- not implemented" gid))
 
 (define-known-foreign-call "getpid" ()
-  #+ccl
-  (ccl::getpid))
+  #+ccl (ccl::getpid)
+  #+clasp (core:getpid))
 
 (define-known-foreign-call "fork" ()
   (format t "; (fork) -- not implemented")
