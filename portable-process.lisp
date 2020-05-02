@@ -5,6 +5,8 @@
 (defvar *current-process* nil)
 (defvar *all-processes* nil)
 (defvar *process-list-lock* (make-lock "process list lock"))
+(defvar *process-run-lock* (make-lock "process run lock"))
+(defvar *process-mayberun-lock* (make-lock "process mayberun lock"))
 
 (defgeneric name (process))
 (defgeneric (setf name) (new-value process))
@@ -110,23 +112,48 @@
             (name process)
             (state process))))
 
-(defun start (process)
+(defun start (process &key push)
   (unless (initial-function process)
     (error "No function initialized for ~A" process))
-  (setf (thread process)
-        (make-thread (make-process-function-wrapper process)
-                     :name (name process)
-                     :initial-bindings (initial-bindings process))))
+
+  (let ((old-thread (thread process)))
+
+    (when (and old-thread (bt:thread-alive-p old-thread))
+      (bt:destroy-thread old-thread)
+      (handler-case 
+	  (trivial-timeout:with-timeout (0.1)
+	    (do () ((not (find process *all-processes*)))))
+	(trivial-timeout:timeout-error (c)
+	  (declare (ignore c))
+	  (ignore-errors (bt:destroy-thread (thread process)))
+	  (remove-from-all-processes process))))
+
+    (unless (find process *all-processes*)
+      (add-to-all-processes process))
+
+    (when push (push push (run-reasons process)))
+    
+    (setf (thread process)
+	  (make-thread (make-process-function-wrapper process)
+		       :name (name process)
+		       :initial-bindings (initial-bindings process)))
+    
+    (thread process)))
+    
 
 (defun maybe-start (process)
+  (when (thread process)
+    (warn "in maybe-start: Thread ~a already exists for ~a~%" (thread process) process))
   (unless (thread process)
     (let ((fun (initial-function process)))
       (when fun
-        (start process)))))
+	(start process)))))
 
 (defmethod enable ((process process))
-  (push :enable (run-reasons process))
-  (start process))
+  ;;(start process)
+  ;;(push :enable (run-reasons process))
+  (start process :push :enable)
+  )
 
 (defmethod killedp ((process process))
   (eql (state process) :killed))
@@ -145,6 +172,7 @@
   (maybe-start process)
   fun)
 
+#+nil
 (defmethod initialize-instance :after ((process process) &key &allow-other-keys)
   (maybe-start process))
 

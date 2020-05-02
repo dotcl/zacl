@@ -20,6 +20,14 @@
   (declare (ignore pid wait))
   (error "Not implemented -- SYS:REAP-OS-SUBPROCESS"))
 
+
+#+ccl 
+(defmacro sys:with-timeout ((timeout &body timeout-body) &body body)
+  ;; from ccl-timers.lisp
+  `(ccl::with-timeout (,timeout ,@timeout-body) ,@body))
+
+
+#-ccl
 (defmacro sys:with-timeout ((timeout &body timeout-body) &body body)
   `(handler-case
        (with-timeout (,timeout) ,@body)

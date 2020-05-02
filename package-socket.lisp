@@ -165,9 +165,16 @@
   (setf (socket-option (socket socket) :tcp-no-delay) nodelay))
 
 (defun socket:remote-host (socket)
-  (ip-address-integer (get-peer-address (socket socket))))
+  (multiple-value-bind (result error)
+      (ignore-errors (ip-address-integer (get-peer-address (socket socket))))
+    (if (typep error 'error)
+	(progn (warn "~&socket:remote-host couldn't get peer address. Returning zero.~%") 0 )
+	result)))
 
 (defun socket:ipaddr-to-dotted (ip-integer)
+  (unless (integerp ip-integer)
+    (warn "~&socket:ipaddr-to-dotted called with non-integer: ~a. Setting to zero.~%" ip-integer)
+    (setq ip-integer 0))
   (format nil "~A.~A.~A.~A"
           (ldb (byte 8 24) ip-integer)
           (ldb (byte 8 16) ip-integer)

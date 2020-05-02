@@ -17,6 +17,7 @@
         (cdr entry)
         :utf-8)))
 
+(defparameter *%atomic-lock%* (bt:make-lock "atomic-lock"))
 
 (defvar excl:*initial-terminal-io* *terminal-io*)
 
@@ -114,11 +115,12 @@ longer anonymous, but has a meaningful name name."
 (defstruct excl::ssl-context)
 
 (defmacro excl::.atomically (&body body)
-  `(progn ,@body))
+  `(bt:with-lock-held (*%atomic-lock%*) (progn ,@body)))
 
 (defmacro excl:atomic-conditional-setf (place new-value old-value)
   (declare (ignore old-value))
-  `(setf ,place ,new-value))
+  `(bt:with-lock-held (*%atomic-lock%*) 
+     (setf ,place ,new-value)))
 
 (defmacro excl:errorset (form &optional announce catch-breaks)
   "Return NIL if FORM signals an error, T and values as multiple
@@ -288,11 +290,11 @@ values otherwise."
 
 (defmacro excl:incf-atomic (place &optional (delta 1))
   ;; XXX FIXME
-  `(incf ,place ,delta))
+  `(bt:with-lock-held (*%atomic-lock%*) (incf ,place ,delta)))
 
 (defmacro excl:decf-atomic (place &optional (delta 1))
   ;; XXX FIXME
-  `(decf ,place (- ,delta)))
+  `(bt:with-lock-held (*%atomic-lock%*) (decf ,place (- ,delta))))
 
 (defstruct (basic-lock (:include excl:synchronizing-structure))
   name)
@@ -480,11 +482,13 @@ values otherwise."
   (or set
       42))
 
+
+
 (defmacro excl:pop-atomic (place)
-  `(pop ,place))
+  `(bt:with-lock-held (*%atomic-lock%*) (pop ,place)))
 
 (defmacro excl:push-atomic (value place)
-  `(push ,value ,place ))
+  `(bt:with-lock-held (*%atomic-lock%*) (push ,value ,place )))
 
 
 ;;; MD5
