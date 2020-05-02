@@ -5,39 +5,39 @@
 (defun fstat-size (fd)
   (multiple-value-bind
         (size mtime mode)
-      (core:fstat fd)
+      (ext:fstat fd)
     size))
 
 (defun fstat-mtime (fd)
   (multiple-value-bind
         (size mtime mode)
-      (core:fstat fd)
+      (ext:fstat fd)
     mtime))
 
 (defun stat-mode (pathname)
   (multiple-value-bind
         (size mtime mode)
-      (core:stat pathname)
+      (ext:stat pathname)
     mode))
 
 (defun stat-mtime (pathname)
   (multiple-value-bind
         (size mtime mode)
-      (core:stat pathname)
+      (ext:stat pathname)
     mtime))
 
 (defun file-kind (pathname)
-  (core::file-kind pathname nil))
+  (core:file-kind pathname nil))
 
 (defun stream-unix-fd (stream)
   ;; Only used for input in aserve
-  (core::file-stream-fd stream))
+  (ext:file-stream-file-descriptor stream))
 
-(defmethod socket-error-identifier ((condition SB-BSD-SOCKETS:SOCKET-ERROR))
-  (SB-BSD-SOCKETS::SOCKET-ERROR-SYMBOL condition))
+(defmethod socket-error-identifier ((condition sb-bsd-sockets:socket-error))
+  (sb-bsd-sockets::socket-error-symbol condition))
 
-(defmethod socket-error-code ((condition SB-BSD-SOCKETS:SOCKET-ERROR))
-  (SB-BSD-SOCKETS::SOCKET-ERROR-ERRNO condition))
+(defmethod socket-error-code ((condition sb-bsd-sockets:socket-error))
+  (sb-bsd-sockets::socket-error-errno condition))
 
 #|
 (with-open-file (stream "/usr/share/dict/words" :direction :input)
