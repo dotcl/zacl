@@ -17,6 +17,10 @@
     :initform nil
     :accessor mp:process-property-list)))
 
+(defmethod print-object ((process process) stream)
+  (print-unreadable-object (process stream :type t :identity t)
+    (format stream "[zacl] ~s ~s" (process-name process) (ccl:process-whostate process))))
+
 (defun make-process (name &key (class 'process) initial-bindings)
   (ccl:make-process name
                     :class class
@@ -33,10 +37,9 @@
 (defun revoke-run-reason (process object)
   (with-lock-held ((reasons-lock process))
     (setf (run-reasons process)
-          (delete object (run-reasons process)))))
-
-(defun process-name (process)
-  (ccl:process-name process))
+          (delete object (run-reasons process))))
+  (unless (run-reasons process)
+    (ccl:process-reset process)))
 
 (defun yield (process)
   (when process
@@ -44,6 +47,8 @@
     (ccl::process-yield process)))
 
 (defun kill (process)
+  (when (string-equal (ccl:process-whostate process) "Reset")
+    (ccl:process-enable process))
   (ccl:process-kill process))
 
 (defun preset (process fun &rest args)
