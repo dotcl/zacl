@@ -121,6 +121,38 @@
     (when (and old-thread (bt:thread-alive-p old-thread))
       (bt:destroy-thread old-thread)
       (handler-case 
+	  (bt:with-timeout (0.1)
+	    (do () ((not (find process *all-processes*)))))
+	(error (c)
+	  (declare (ignore c))
+	  (ignore-errors (bt:destroy-thread (thread process)))
+	  (remove-from-all-processes process))))
+
+    (unless (find process *all-processes*)
+      (add-to-all-processes process))
+
+    (when push (push push (run-reasons process)))
+    
+    (setf (thread process)
+	  (make-thread (make-process-function-wrapper process)
+		       :name (name process)
+		       :initial-bindings (initial-bindings process)))
+    
+    (thread process)))
+
+;;
+;; Trivial-timeout not really needed. 
+;;
+#+nil
+(defun start (process &key push)
+  (unless (initial-function process)
+    (error "No function initialized for ~A" process))
+
+  (let ((old-thread (thread process)))
+
+    (when (and old-thread (bt:thread-alive-p old-thread))
+      (bt:destroy-thread old-thread)
+      (handler-case 
 	  (trivial-timeout:with-timeout (0.1)
 	    (do () ((not (find process *all-processes*)))))
 	(trivial-timeout:timeout-error (c)
