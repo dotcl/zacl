@@ -17,6 +17,7 @@
         (cdr entry)
         :utf-8)))
 
+(defparameter *%atomic-lock%* (bt:make-lock "atomic-lock"))
 
 (defvar excl:*initial-terminal-io* *terminal-io*)
 
