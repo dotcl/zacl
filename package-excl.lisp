@@ -129,13 +129,22 @@ longer anonymous, but has a meaningful name name."
   #+sbcl `(sb-ext:compare-and-swap ,place ,old-value ,new-value)
   #-sbcl `(setf ,place ,new-value))
 
+#+nil
 (defmacro excl:incf-atomic (place &optional (delta 1))
   #+sbcl `(sb-ext:atomic-incf ,place ,delta)
   #-sbcl `(incf ,place ,delta))
 
+(defmacro excl:incf-atomic (place &optional (delta 1))
+  `(bt:with-lock-held (*%atomic-lock%*) (incf ,place ,delta)))
+
+#+nil
 (defmacro excl:decf-atomic (place &optional (delta 1))
   #+sbcl `(sb-ext:atomic-decf ,place ,delta)
   #-sbcl `(decf ,place ,delta))
+
+(defmacro excl:decf-atomic (place &optional (delta 1))
+  `(bt:with-lock-held (*%atomic-lock%*) (decf ,place ,delta)))
+
 
 (defmacro excl:pop-atomic (place)
   #+sbcl `(sb-ext:atomic-pop ,place)
