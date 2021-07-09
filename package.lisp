@@ -14,10 +14,13 @@
   #+sbcl
   (:import-from #:usocket
 		#:get-host-by-name)
-  
+
   (:import-from #:cl+ssl
                 #:make-ssl-client-stream
-                #:make-ssl-server-stream)
+                #:make-ssl-server-stream
+		#:with-global-context
+		#:make-context
+		#:use-certificate-chain-file)
   #+ccl
   (:import-from #:ccl
                 #:without-interrupts
@@ -47,11 +50,21 @@
                 #:finalize-md5-state)
   (:import-from #:split-sequence
                 #:split-sequence)
+
   (:import-from #:flexi-streams
                 #:with-output-to-sequence
                 #:get-output-stream-sequence
                 #:string-to-octets
                 #:octets-to-string)
+  
+  #+nil
+  (:import-from #:babel
+		#:string-to-octets
+                #:octets-to-string)
+  #+nil
+  (:import-from #:babel-streams
+                #:with-output-to-sequence
+                #:get-output-stream-sequence)
   (:import-from #:usocket
                 #:socket-listen
                 #:socket-accept
@@ -60,6 +73,7 @@
                 #:get-local-port
                 #:socket-option
                 #:get-peer-address
+		#:get-peer-port
                 #:usocket-p
                 #:usocket
                 #:stream-usocket
@@ -246,21 +260,67 @@
 
 (defpackage #:socket
   (:use)
-  (:intern #:make-ssl-server-stream
-           #:make-ssl-client-stream)
-  (:export #:make-socket
-           #:socket-error
-           #:accept-connection
-           #:socket-control
-           #:local-port
-           #:local-host
-           #:set-socket-options
-           #:ipaddr-to-dotted
-           #:ipaddr-to-hostname
-           #:dotted-to-ipaddr
-           #:lookup-hostname
-           #:remote-host
-           #:with-pending-connect))
+  (:export
+   ;; Special Variables
+   #:*socket-version* ;; unimplemented
+   #:*print-hostname-in-stream* ;; unimplemented needed, irrelevant
+   #:*ipv6* ;; unimplemented
+
+   ;; General Functions
+   #:accept-connection
+   #:dotted-to-ipaddr
+   #:dotted-address-p	       ;; unimplemented
+   #:get-ip-interfaces	       ;; unimplemented
+   #:ipaddr-to-dotted
+   #:ipaddr-equalp ;; unimplemented
+   #:ipaddr-to-hostname
+   #:ipaddrp		    ;; unimplemented
+   #:ipv6		    ;; unimplemented
+   #:ipv6-address-p	    ;; unimplemented
+   #:lookup-hostname
+   #:lookup-port ;; unimplemented
+   #:make-socket
+   #:with-pending-connect
+   #:receive-from		;; unimplemented
+   #:send-to			;; unimplemented
+   #:set-socket-options
+   #:shutdown			;; unimplemented
+   #:socket-control
+   #:socket-os-fd ;; unimplemented
+
+   ;; Socket Acessores
+   #:remote-host
+   #:local-host
+   #:local-port
+   #:remote-filename ;; unimplemented
+   #:local-filename ;; unimplemented
+   #:remote-port ;; unimplemented
+   #:socket-address-family ;; unimplemented
+   #:socket-connect ;; unimplemented
+   #:socket-format ;; unimplemented
+   #:socket-type ;; unimplemented
+
+   ;; Errors
+   #:socket-error
+
+   ;; Allegro SSL API
+   #:get-ssl-peer-certificate
+   #:get-ssl-verify-result
+   #:make-ssl-client-context
+   #:make-ssl-client-stream
+   #:make-ssl-server-context
+   #:make-ssl-server-stream
+   #:ssl-do-handshake ;; unimplemented needed
+
+   #:x509-certificate ;; unimplemented, class
+   #:x509-certificate-issuer ;; unimplemented
+   #:x509-certificate-not-after ;; unimplemented
+   #:x509-certificate-not-before ;; unimplemented
+   #:x509-certificate-serial-number ;; unimplemented
+   #:x509-certificate-subject
+   #:x509-certificate-subject-alt-name ;; unimplemented
+   #:x509-certificate-version ;; unimplemented
+   ))
 
 (defpackage #:user
   (:use #:cl
