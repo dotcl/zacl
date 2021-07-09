@@ -231,8 +231,8 @@ values otherwise."
 
 (defun excl:native-string-sizeof (string &key (external-format :latin1))
   (length (string-to-octets string
-                            ;;:encoding (translate-external-format external-format)
-                            :external-format (translate-external-format external-format)
+                            :encoding (translate-external-format external-format)
+                            ;;:external-format (translate-external-format external-format)
                             )))
 
 (defun excl:string-to-mb (string &key external-format mb-vector null-terminate)
@@ -240,8 +240,8 @@ values otherwise."
     (error "Cannot null-terminate"))
   (let ((result
          (string-to-octets string
-                           ;;:encoding (translate-external-format external-format)
-                           :external-format (translate-external-format external-format)
+                           :encoding (translate-external-format external-format)
+                           ;;:external-format (translate-external-format external-format)
                            )))
     (if mb-vector
         (replace mb-vector result)
@@ -251,15 +251,15 @@ values otherwise."
   (when null-terminate
     (error "No null terminating!"))
   (string-to-octets string
-                    ;;:encoding (translate-external-format external-format)
-                    :external-format (translate-external-format external-format)
+                    :encoding (translate-external-format external-format)
+                    ;;:external-format (translate-external-format external-format)
                     ))
 
 (defun excl:mb-to-string (string &key external-format (start 0)
                                    (end (length string)))
   (octets-to-string string
-                    ;;:encoding (translate-external-format external-format)
-                    :external-format (translate-external-format external-format)
+                    :encoding (translate-external-format external-format)
+                    ;;:external-format (translate-external-format external-format)
                     :start start
                     :end end))
 
@@ -271,8 +271,8 @@ values otherwise."
   (octets-to-string octets
                     :start start
                     :end end
-                    ;;:encoding (translate-external-format external-format)
-                    :external-format (translate-external-format external-format)
+                    :encoding (translate-external-format external-format)
+                    ;;:external-format (translate-external-format external-format)
                     ))
 
 (defun excl:schedule-finalization (object fun)
@@ -344,6 +344,7 @@ values otherwise."
 ;;; Streams
 
 
+#|
 (defgeneric excl:device-open (stream slot-names initargs))
 (defgeneric excl:device-close (stream abort))
 (defgeneric excl:device-read (stream buffer start end blocking))
@@ -525,12 +526,12 @@ values otherwise."
   `(bt:with-lock-held (*%atomic-lock%*) (push ,value ,place )))
 
 
-
+|#
 
 ;;
 ;; Loliv's contrib below:
 ;;
-#|
+
 
 (defgeneric excl:device-open (stream slot-names initargs))
 (defgeneric excl:device-close (stream abort))
@@ -600,7 +601,9 @@ values otherwise."
           (error "Can't handle buffering yet"))
         (let ((string (octets-to-string buffer
                                         :end result
-                                        :encoding (zacl-cl:stream-external-format stream))))
+                                        :encoding (zacl-cl:stream-external-format stream)
+                                        ;;:external-format (zacl-cl:stream-external-format stream)
+                                        )))
           (replace sequence string :start1 start :end1 end)
           (min end (+ start (length string)))))
       (let ((result (excl:device-read stream sequence start end nil)))
@@ -624,7 +627,10 @@ values otherwise."
   (let ((sequence (babel:string-to-octets string
 					  :start start
 					  :end end
-					  :encoding (zacl-cl:stream-external-format stream))))
+					  :encoding (zacl-cl:stream-external-format stream)
+                                          ;;:external-format (zacl-cl:stream-external-format stream)
+                                          )))
+    
     (stream-write-sequence stream sequence 0 (length sequence)))
   string)
 
@@ -702,7 +708,9 @@ values otherwise."
           (error "Can't handle buffering yet"))
         (let ((string (octets-to-string buffer
                                         :end result
-                                        :encoding (zacl-cl:stream-external-format stream))))
+                                        :encoding (zacl-cl:stream-external-format stream)
+                                        ;;:external-format (zacl-cl:stream-external-format stream)
+                                        )))
           (replace sequence string :start1 start :end1 end)
           (min end (+ start (length string)))))
       (let ((result (excl:device-read stream sequence start end nil)))
@@ -746,7 +754,6 @@ values otherwise."
   (or set
       42))
 
-|#
 ;;
 ;; End Loliv's contrib.
 ;;
@@ -759,8 +766,8 @@ values otherwise."
 (defun excl:md5-update (state data &key (start 0) end external-format)
   (when (stringp data)
     (setf data (string-to-octets data
-                                 ;;:encoding (or external-format :latin-1)
-                                 :external-format (or external-format :latin-1)
+                                 :encoding (or external-format :latin-1)
+                                 ;;:external-format (or external-format :latin-1)
                                  :start start
                                  :end (or end (length data))))
     (setf start 0)
@@ -797,8 +804,9 @@ values otherwise."
     (let ((octets
            (with-output-to-sequence (s)
              (store object stream))))
-      (write-string (octets-to-string octets ;;:encoding :latin-1
-                                      :external-format :latin-1
+      (write-string (octets-to-string octets
+                                      :encoding :latin-1
+                                      ;;:external-format :latin-1
 
                                       ) stream))))
 

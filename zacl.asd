@@ -10,8 +10,8 @@
                #:usocket
                #:bordeaux-threads
                #:cl-ppcre
-               #:flexi-streams
-               ;;#:babel-streams
+               ;;#:flexi-streams
+               #:babel-streams
                #:quri
                #:trivial-garbage
                #:trivial-backtrace
