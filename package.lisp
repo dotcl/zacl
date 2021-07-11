@@ -51,17 +51,18 @@
   (:import-from #:split-sequence
                 #:split-sequence)
 
+  #+nil
   (:import-from #:flexi-streams
                 #:with-output-to-sequence
                 #:get-output-stream-sequence
                 #:string-to-octets
                 #:octets-to-string)
   
-  #+nil
+
   (:import-from #:babel
 		#:string-to-octets
                 #:octets-to-string)
-  #+nil
+
   (:import-from #:babel-streams
                 #:with-output-to-sequence
                 #:get-output-stream-sequence)

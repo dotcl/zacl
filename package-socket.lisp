@@ -72,8 +72,8 @@
   (map nil (lambda (octet)
              (stream-write-byte stream octet))
        (string-to-octets (string char)
-                         ;;:encoding (socket-ef stream)
-                         :external-format (socket-ef stream)
+                         :encoding (socket-ef stream)
+                         ;;:external-format (socket-ef stream)
                          )))
 
 (defmethod stream-write-sequence :after ((stream zacl-socket) sequence
@@ -91,8 +91,8 @@
                                   &key &allow-other-keys)
   (when (typep sequence 'string)
     (setf sequence (string-to-octets sequence :start start :end end
-                                              ;;:encoding (socket-ef stream)
-                                              :external-format (socket-ef stream)
+                                              :encoding (socket-ef stream)
+                                              ;;:external-format (socket-ef stream)
                                               ))
     (setf start 0)
     (setf end (length sequence)))
@@ -121,8 +121,9 @@
             (buffer (make-array (- end start) :element-type '(unsigned-byte 8))))
         (let* ((after-index (read-sequence buffer (real-stream stream)))
                (string (octets-to-string buffer :start 0 :end after-index
-                                                ;;:encoding :latin-1
-                                                :external-format :latin-1)))
+                                                :encoding :latin-1
+                                                ;;:external-format :latin-1
+                                                )))
           (replace sequence string :start1 start :end1 end
                    :start2 0 :end2 after-index)
           (+ offset after-index)))
@@ -137,8 +138,8 @@
             (buffer (make-array (- end start) :element-type '(unsigned-byte 8))))
         (let* ((after-index (read-sequence buffer (real-stream stream)))
                (string (octets-to-string buffer :start 0 :end after-index
-                                         ;;:encoding :latin-1
-                                         :external-format :latin-1
+                                                :encoding :latin-1
+                                                ;;:external-format :latin-1
                                                 )))
           (replace sequence string :start1 start :end1 end
                    :start2 0 :end2 after-index)
