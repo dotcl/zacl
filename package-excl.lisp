@@ -442,9 +442,11 @@ values otherwise."
     (incf (zacl-simple-stream-output-pointer stream)))
   byte)
 
-(defmethod stream-write-string ((stream zacl-simple-stream) string &optional start end)
+(defmethod trivial-gray-streams::stream-write-string ((stream zacl-simple-stream) string &optional start end)
+  
   (unless start (setf start 0))
   (unless end (setf end (length string)))
+
   (let ((sequence (babel:string-to-octets string
 					  :start start
 					  :end end
@@ -482,6 +484,7 @@ values otherwise."
   
   (unless start (setf start 0))
   (unless end (setf end (length sequence)))
+
   (let ((buffer (zacl-simple-stream-output-buffer stream)))
     ;; no space in buffer?
     (when (> (+ (- end start) (zacl-simple-stream-output-pointer stream))
