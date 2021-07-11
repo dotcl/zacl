@@ -10,8 +10,7 @@
                #:usocket
                #:bordeaux-threads
                #:cl-ppcre
-               ;;#:flexi-streams
-               #:babel-streams
+               #:flexi-streams
                #:quri
                #:trivial-garbage
                #:trivial-backtrace
@@ -31,8 +30,8 @@
                (:file "sbcl-specific")
                #-clozure
                (:file "portable-process")
-               #+clozure
-               (:file "ccl-timers")
+	       #+clozure
+	       (:file "ccl-timers")
                #+clozure
                (:file "clozure-process")
                (:file "defpackage-hack")
@@ -52,4 +51,7 @@
                (:file "utils")
                (:file "asdf-tricks")
                (:file "provides")))
+
+
+
 

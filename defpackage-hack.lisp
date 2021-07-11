@@ -23,9 +23,7 @@
 
 (defgeneric zacl-cl:stream-external-format (stream)
   (:method (stream)
-    (stream-external-format stream))
-  (:method ((stream broadcast-stream))
-    (zacl-cl:stream-external-format (alexandria:lastcar (broadcast-stream-streams stream)))))
+    (stream-external-format stream)))
 
 (defgeneric (setf zacl-cl:stream-external-format) (new-value stream)
   (:method (new-value stream)
