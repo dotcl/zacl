@@ -5,6 +5,10 @@
 
 (in-package #:zacl)
 
+(defparameter *encoding-external-format-key* (let ((babel (find-package :babel)))
+                                             (if (and babel (eql (symbol-package 'octets-to-string) babel))
+                                                 :encoding :external-format)))
+
 (defparameter *external-format-translations*
   '((:octets . :latin1)
     (:latin1-base . :latin1)
@@ -240,9 +244,8 @@ values otherwise."
      ,@body))
 
 (defun excl:native-string-sizeof (string &key (external-format :latin1))
-  (length (string-to-octets string
-                            :encoding (translate-external-format external-format)
-                            ;;:external-format (translate-external-format external-format)
+  (length (string-to-octets string *encoding-external-format-key*
+                            (translate-external-format external-format)
                             )))
 
 (defun excl:string-to-mb (string &key external-format mb-vector null-terminate)
@@ -250,8 +253,7 @@ values otherwise."
     (error "Cannot null-terminate"))
   (let ((result
          (string-to-octets string
-                           :encoding (translate-external-format external-format)
-                           ;;:external-format (translate-external-format external-format)
+                           *encoding-external-format-key* (translate-external-format external-format)
                            )))
     (if mb-vector
         (replace mb-vector result)
@@ -261,15 +263,13 @@ values otherwise."
   (when null-terminate
     (error "No null terminating!"))
   (string-to-octets string
-                    :encoding (translate-external-format external-format)
-                    ;;:external-format (translate-external-format external-format)
+                    *encoding-external-format-key* (translate-external-format external-format)
                     ))
 
 (defun excl:mb-to-string (string &key external-format (start 0)
                                    (end (length string)))
   (octets-to-string string
-                    :encoding (translate-external-format external-format)
-                    ;;:external-format (translate-external-format external-format)
+                    *encoding-external-format-key* (translate-external-format external-format)
                     :start start
                     :end end))
 
@@ -281,8 +281,7 @@ values otherwise."
   (octets-to-string octets
                     :start start
                     :end end
-                    :encoding (translate-external-format external-format)
-                    ;;:external-format (translate-external-format external-format)
+                    *encoding-external-format-key* (translate-external-format external-format)
                     ))
 
 (defun excl:schedule-finalization (object fun)
@@ -353,196 +352,6 @@ values otherwise."
 
 ;;; Streams
 
-
-#|
-(defgeneric excl:device-open (stream slot-names initargs))
-(defgeneric excl:device-close (stream abort))
-(defgeneric excl:device-read (stream buffer start end blocking))
-(defgeneric excl:device-write (stream buffer start end blocking))
-(defgeneric excl:install-single-channel-character-strategy (stream format &optional default)
-  (:method (stream format &optional default)
-    (declare (ignore stream format default))))
-
-(defvar excl::*std-control-out-table* nil)
-
-(defclass zacl-simple-stream (fundamental-binary-output-stream
-                              fundamental-binary-input-stream)
-  ())
-
-;; Needed for SBCL
-(defmethod stream-element-type ((stream zacl-simple-stream))
-  '(unsigned-byte 8))
-
-(defmethod stream-write-char ((stream zacl-simple-stream) char)
-  (let ((buffer (string-to-octets (string char))))
-    (excl:device-write stream buffer 0 (length buffer) nil)))
-
-(defmethod stream-write-byte ((stream zacl-simple-stream) byte)
-  (let ((buffer (make-array 1 :element-type '(unsigned-byte 8)
-                            :initial-element byte)))
-    (excl:device-write stream buffer 0 1 nil)))
-
-(defclass excl:single-channel-simple-stream (zacl-simple-stream)
-  ((excl::buffer
-    :initform (make-array 1024 :element-type '(unsigned-byte 8))
-    :reader buffer)
-   (excl::output-handle
-    :initarg :output-handle)
-   (excl::input-handle
-    :initarg :input-handle
-    :reader excl::stream-input-handle)
-   (excl::buffer-ptr)
-   (excl::control-out)
-   (excl::co-state)
-   (excl::oc-state)
-   (external-format
-    :initarg :external-format
-    :initform :latin1
-    :accessor zacl-cl:stream-external-format)))
-
-(defmethod shared-initialize :after ((stream
-                                      excl:single-channel-simple-stream)
-                                     slot-names
-                                     &rest initargs &key &allow-other-keys)
-  (excl:device-open stream slot-names initargs))
-
-(defmethod close ((stream excl:single-channel-simple-stream) &key abort)
-  (excl:device-close stream abort))
-
-
-
-(defgeneric underlying-output-stream (stream)
-  (:method ((stream excl:single-channel-simple-stream))
-    (underlying-output-stream (slot-value stream 'excl::output-handle)))
-  (:method ((stream stream-usocket))
-    (socket-stream stream))
-  (:method ((stream usocket))
-    (socket-stream stream))
-  (:method ((stream stream))
-    stream))
-
-(defgeneric underlying-input-stream (stream)
-  (:method ((stream excl:single-channel-simple-stream))
-    (underlying-input-stream (slot-value stream 'excl::input-handle)))
-  (:method ((stream usocket))
-    (socket-stream stream))
-  (:method ((stream stream))
-    stream))
-
-(defmethod stream-write-string ((stream excl:single-channel-simple-stream) string &optional start end)
-  (unless start (setf start 0))
-  (unless end (setf end (length string)))
-  (let ((buffer (string-to-octets string :start start :end end
-                                  :external-format (zacl-cl:stream-external-format stream))))
-    (excl:device-write stream buffer 0 (length buffer) nil)))
-
-(defmethod stream-write-sequence ((stream excl:single-channel-simple-stream) sequence start end &key &allow-other-keys)
-  (excl:device-write stream sequence start end nil)
-  sequence)
-
-#+ccl
-(defmethod ccl:stream-write-vector ((stream excl:single-channel-simple-stream) sequence start end)
-  (unless start (setf start 0))
-  (unless end (setf end (length sequence)))
-  (excl:device-write stream sequence start end nil))
-
-#+ccl
-(defmethod ccl:stream-read-vector ((stream excl:single-channel-simple-stream) sequence start end)
-  (unless start (setf start 0))
-  (unless end (setf end (length sequence)))
-  (if (stringp sequence)
-      (let ((result (excl:device-read stream nil 0 nil nil))
-            (buffer (buffer stream )))
-        (when (minusp result)
-          (return-from ccl:stream-read-vector 0))
-        (when (<= (- end start) result)
-          (error "Can't handle buffering yet"))
-        (let ((string (octets-to-string buffer
-                                        :end result
-                                        :external-format (zacl-cl:stream-external-format stream))))
-          (replace sequence string :start1 start :end1 end)
-          (min end (+ start (length string)))))
-      (let ((result (excl:device-read stream sequence start end nil)))
-        (if (minusp result)
-            0
-            result))))
-
-(defmethod stream-read-sequence ((stream excl:single-channel-simple-stream) sequence start end
-                                 &key &allow-other-keys)
-  (unless start (setf start 0))
-  (unless end (setf end (length sequence)))
-  (if (stringp sequence)
-      (let ((result (excl:device-read stream nil 0 nil nil))
-            (buffer (buffer stream )))
-        (when (minusp result)
-          (return-from stream-read-sequence 0))
-        (when (<= (- end start) result)
-          (error "Can't handle buffering yet"))
-        (let ((string (octets-to-string buffer
-                                        :end result
-                                        :external-format (zacl-cl:stream-external-format stream))))
-          (replace sequence string :start1 start :end1 end)
-          (min end (+ start (length string)))))
-      (let ((result (excl:device-read stream sequence start end nil)))
-        (if (minusp result)
-            0
-            result))))
-
-(defmethod stream-force-output ((stream excl:single-channel-simple-stream))
-  (force-output (underlying-output-stream stream)))
-
-(defmethod stream-force-output ((stream usocket))
-  (force-output (underlying-output-stream stream)))
-
-(defmethod stream-read-char ((stream usocket))
-  (stream-read-char (socket-stream stream)))
-
-(defmethod stream-read-byte ((stream usocket))
-  (stream-read-byte (socket-stream stream)))
-
-(defmethod cl:close ((stream usocket) &key abort)
-  (close (socket-stream stream) :abort abort))
-
-(defmacro excl:add-stream-instance-flags (stream &rest flags)
-  (declare (ignore stream flags))
-  nil)
-
-(defun excl:write-vector (vector stream &key (start 0) (end (length vector)))
-  ;; The real write-vector has more complicated blocking
-  ;; behavior. Save that for later.
-  (let ((result end))
-    (when (stringp vector)
-      (setf vector (string-to-octets vector :start start :end end))
-      (setf start 0)
-      (setf end (length vector)))
-    (write-sequence vector stream :start start :end end)
-    result))
-
-(defun excl:read-vector (vector stream &key (start 0) end endian-swap)
-  (declare (ignore endian-swap))
-  (read-sequence vector stream :start start :end end))
-
-(defmethod excl::socket-bytes-written (socket &optional set)
-  (declare (ignore socket))
-  (or set
-      42))
-
-
-
-(defmacro excl:pop-atomic (place)
-  `(bt:with-lock-held (*%atomic-lock%*) (pop ,place)))
-
-(defmacro excl:push-atomic (value place)
-  `(bt:with-lock-held (*%atomic-lock%*) (push ,value ,place )))
-
-
-|#
-
-;;
-;; Loliv's contrib below:
-;;
-
-
 (defgeneric excl:device-open (stream slot-names initargs))
 (defgeneric excl:device-close (stream abort))
 (defgeneric excl:device-read (stream buffer start end blocking))
@@ -611,8 +420,7 @@ values otherwise."
           (error "Can't handle buffering yet"))
         (let ((string (octets-to-string buffer
                                         :end result
-                                        :encoding (zacl-cl:stream-external-format stream)
-                                        ;;:external-format (zacl-cl:stream-external-format stream)
+                                        *encoding-external-format-key* (zacl-cl:stream-external-format stream)
                                         )))
           (replace sequence string :start1 start :end1 end)
           (min end (+ start (length string)))))
@@ -620,6 +428,7 @@ values otherwise."
         (if (minusp result)
             0
             result))))
+
 
 (defmethod stream-write-char ((stream zacl-simple-stream) char)
   (stream-write-string stream (string char) 0 1)
@@ -634,20 +443,45 @@ values otherwise."
   byte)
 
 (defmethod stream-write-string ((stream zacl-simple-stream) string &optional start end)
+  (unless start (setf start 0))
+  (unless end (setf end (length string)))
   (let ((sequence (babel:string-to-octets string
 					  :start start
 					  :end end
-					  :encoding (zacl-cl:stream-external-format stream)
-                                          ;;:external-format (zacl-cl:stream-external-format stream)
+					  *encoding-external-format-key* (zacl-cl:stream-external-format stream)
                                           )))
     
     (stream-write-sequence stream sequence 0 (length sequence)))
   string)
 
 (defmethod stream-write-sequence ((stream zacl-simple-stream) (sequence string) start end &key)
+  (unless start (setf start 0))
+  (unless end (setf end (length sequence)))
   (stream-write-string stream sequence start end))
 
-(defmethod stream-write-sequence ((stream zacl-simple-stream) sequence start end &key)
+
+
+;;
+;; FLAG -- the second version of stream-write-sequence below should in
+;; principle work on CCL, but does not, so we have to fall back to the
+;; simplified version for CCL until we can diagnose and fix the
+;; problem with the second version which apparently is implementing
+;; the chunking behavior.
+;;
+
+#+ccl
+(defmethod stream-write-sequence ((stream zacl-simple-stream) sequence start end &key &allow-other-keys)
+  (unless start (setf start 0))
+  (unless end (setf end (length sequence)))
+  (excl:device-write stream sequence start end nil)
+  sequence)
+
+
+#+sbcl
+(defmethod stream-write-sequence ((stream zacl-simple-stream) sequence start end &key &allow-other-keys)
+  
+  (unless start (setf start 0))
+  (unless end (setf end (length sequence)))
   (let ((buffer (zacl-simple-stream-output-buffer stream)))
     ;; no space in buffer?
     (when (> (+ (- end start) (zacl-simple-stream-output-pointer stream))
@@ -666,6 +500,7 @@ values otherwise."
 	     :end2 end)
     (incf (zacl-simple-stream-output-pointer stream) (- end start)))
   sequence)
+
 
 (defmethod stream-force-output ((stream zacl-simple-stream))
   (let ((buffer (zacl-simple-stream-output-buffer stream)))
@@ -718,8 +553,7 @@ values otherwise."
           (error "Can't handle buffering yet"))
         (let ((string (octets-to-string buffer
                                         :end result
-                                        :encoding (zacl-cl:stream-external-format stream)
-                                        ;;:external-format (zacl-cl:stream-external-format stream)
+                                        *encoding-external-format-key*  (zacl-cl:stream-external-format stream)
                                         )))
           (replace sequence string :start1 start :end1 end)
           (min end (+ start (length string)))))
@@ -764,10 +598,6 @@ values otherwise."
   (or set
       42))
 
-;;
-;; End Loliv's contrib.
-;;
-
 ;;; MD5
 
 (defun excl:md5-init ()
@@ -776,8 +606,7 @@ values otherwise."
 (defun excl:md5-update (state data &key (start 0) end external-format)
   (when (stringp data)
     (setf data (string-to-octets data
-                                 :encoding (or external-format :latin-1)
-                                 ;;:external-format (or external-format :latin-1)
+                                 *encoding-external-format-key*  (or external-format :latin-1)
                                  :start start
                                  :end (or end (length data))))
     (setf start 0)
@@ -815,8 +644,7 @@ values otherwise."
            (with-output-to-sequence (s)
              (store object stream))))
       (write-string (octets-to-string octets
-                                      :encoding :latin-1
-                                      ;;:external-format :latin-1
+                                      *encoding-external-format-key*  :latin-1
 
                                       ) stream))))
 
@@ -840,3 +668,5 @@ values otherwise."
 (defun excl::acl-internal-real-time ()
   (values (-  (get-universal-time) 4165516800)
 	  (/ (local-time:nsec-of (local-time:now)) 1000)))
+
+
