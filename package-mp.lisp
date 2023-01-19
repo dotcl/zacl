@@ -36,7 +36,9 @@
     (make-process name :class 'process
                   :initial-bindings initial-bindings)))
 
-(defgeneric mp:process-thread (process))
+(defgeneric mp:process-thread (process)
+  (:method ((process process))
+    (thread process)))
 
 (defgeneric mp:process-name (process)
   (:method (process)
@@ -94,11 +96,17 @@
     (with-lock-held ((lock queue))
       (qpush (queue queue) thing))))
 
+;;
+;; The #-nil and #+nil below used to be #-sbcl and #+sbcl, but that
+;; caused an accept error in http-accept-thread. 
+;;
 (defgeneric mp:dequeue (queue &key wait empty-queue-result whostate)
   (:method (queue &key wait empty-queue-result whostate)
-    (declare (ignore whostate wait))
+    (declare (ignore whostate #-nil wait))
     (with-lock-held ((lock queue))
-      (qpop (queue queue) empty-queue-result))))
+      (qpop (queue queue) empty-queue-result #+nil wait))))
+
+
 
 (defun mp:wait-for-input-available (stream-or-fds
                                     &key wait-function whostate timeout)
