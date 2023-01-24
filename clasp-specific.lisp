@@ -59,3 +59,4 @@
 
 
 
+(defclass excl:terminal-simple-stream (t) ())

@@ -27,7 +27,7 @@
    (getf plist :initial-bindings)))
 
 (defun mp:make-process-allegro (function &key name initial-bindings)
-  (mp::make-process  (or name "No name") function nil initial-bindings))
+  (mp::make-process (or name "No name") function nil initial-bindings))
 
 (defmethod mp:process-keeps-lisp-alive-p (argument))
 (defmethod (setf mp:process-keeps-lisp-alive-p) (argument1 argument2))
@@ -60,6 +60,10 @@
 
 (defun mp:process-allow-schedule ()
   (mp:process-yield))
+
+
+(defclass mp:process-lock (excl:lockable-object) ())
+
 
 #|
 
