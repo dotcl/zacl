@@ -170,8 +170,8 @@
 
 (defmethod close ((stream zacl-socket) &key abort)
   (declare (ignore abort))
-  (close (real-stream stream))
-  (socket-close (socket stream)))
+  (socket-close (socket stream))
+  (close (real-stream stream)))
 
 (defun socket:make-socket (&key connect local-port local-host reuse-address
                              remote-port remote-host
