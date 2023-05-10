@@ -1,5 +1,7 @@
 (in-package :cl-user)
 
+#+sbcl (require :sb-posix)
+
 
 (defun %exe-path% ()
   (let ((directory-pathname
@@ -25,15 +27,22 @@
                    (openssl-likely-locations
                      (list "C:/Program Files/OpenSSL-Win/bin/"
                            (merge-pathnames "openssl-bin/" exe-path)
-                           (merge-pathnames "../openssl-bin/" exe-path)))
+                           (merge-pathnames "../openssl-bin/" exe-path)
+                           (merge-pathnames "../../openssl-bin/" exe-path)))
                    (openssl-bin
                      (or openssl-bin
                          (first (remove nil (mapcar #'probe-file openssl-likely-locations))))))
+              (format t "~&exe-path: ~a~%" exe-path)
+              (format t "~&openssl-likely-locations: ~a~%~%" openssl-likely-locations)
+              (format t "~&openssl-bin: ~a~%~%" openssl-bin)
+              
               (if openssl-bin
                   (progn
                     (let ((path #+ccl (ccl:getenv "PATH")
-                                #-ccl (error "need getenv impl for ~a.~%"
-                                             (lisp-implementation-type)))
+                                #+sbcl (sb-posix:getenv "PATH")
+                                #-(or ccl sbcl)
+                                (error "need getenv impl for ~a.~%"
+                                       (lisp-implementation-type)))
                           (openssl-component (format nil "~a;" openssl-bin)))
                       (unless (search openssl-component path)
 
@@ -41,7 +50,10 @@
                                 openssl-component)
                   
                         #+ccl (ccl:setenv "PATH" (concatenate 'string openssl-component path))
-                        #-ccl (error "Need setenv impl for ~a.~%" (lisp-implementation-type))))
+                        #+sbcl (sb-posix:setenv
+                                "PATH" (concatenate 'string openssl-component path) 1)
+                        #-(or ccl sbcl)
+                        (error "Need setenv impl for ~a.~%" (lisp-implementation-type))))
                     (pushnew openssl-bin
                              (symbol-value (read-from-string "cffi:*foreign-library-directories*"))
                              :test #'equalp))
@@ -81,6 +93,8 @@ with &key argument :openssl-bin <path to openssl binaries>
       (when ffi (load ffi)))))
 
 
+#+sbcl (format t "PATH: ~a~%" (sb-posix:getenv "PATH"))
 
 (setup-cl+ssl)
 
+#+sbcl (format t "PATH: ~a~%" (sb-posix:getenv "PATH"))

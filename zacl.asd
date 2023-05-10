@@ -7,7 +7,8 @@
   :license "BSD"
   :defsystem-depends-on (#:setup-cl+ssl)
   :depends-on (#:uiop
-               #:asdf
+               #:asdf ;; FLAG -- why do we depend on asdf??
+               #:atomics
                #:usocket
                #:bordeaux-threads
                #:cl-ppcre

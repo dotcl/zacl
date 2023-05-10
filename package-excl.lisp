@@ -26,6 +26,7 @@
 
 (defvar excl:*current-case-mode* :case-insensitive-upper)
 
+(defparameter *use-atomics?* t)
 
 (defmacro excl:named-function (name lambda-form)
   "Return the function produced by LAMBDA-FORM wrapped in a named
@@ -123,14 +124,14 @@ longer anonymous, but has a meaningful name name."
   `(progn ,@body))
 
 (defmacro excl:atomic-conditional-setf (place new-value old-value)
-  #-sbcl (declare (ignore old-value))
   ;; ATTENTION: the arguments in SB-EXT:COMPARE-AND-SWAP have a different order
   #+sbcl `(sb-ext:compare-and-swap ,place ,old-value ,new-value)
-  #-sbcl `(setf ,place ,new-value))
+  #-sbcl `(if *use-atomics?* (atomics:cas ,place ,old-value ,new-value)
+              (setf ,place ,new-value)))
 
 (defmacro excl:incf-atomic (place &optional (delta 1))
-  #+sbcl `(sb-ext:atomic-incf ,place ,delta)
-  #-sbcl `(incf ,place ,delta))
+  `(if *use-atomics?* (atomics:atomic-incf ,place ,delta)
+       (incf ,place ,delta)))
 
 ;;
 ;; FLAG -- sb-ext:atomic-decf is crashing on SBCL when compiling proxy.cl
@@ -139,16 +140,26 @@ longer anonymous, but has a meaningful name name."
 (defmacro excl:decf-atomic (place &optional (delta 1))
   #+sbcl `(sb-ext:atomic-decf ,place ,delta)
   #-sbcl `(decf ,place ,delta))
+
 (defmacro excl:decf-atomic (place &optional (delta 1))
-  `(decf ,place ,delta))
+  `(decf ,place ,delta)
+  #+nil
+  `(if *use-atomics?* (atomics:atomic-decf ,place ,delta)
+       (decf ,place ,delta)))
 
 (defmacro excl:pop-atomic (place)
+  #+ccl `(pop ,place)
   #+sbcl `(sb-ext:atomic-pop ,place)
-  #-sbcl `(pop ,place))
+  ;; FLAG -- add below when version of atomics supports push/pop. 
+  #+nil
+  `(if *use-atomics?* (atomics:atomic-pop ,place)
+       (pop ,place)))
 
 (defmacro excl:push-atomic (value place)
+  #+ccl `(push ,value ,place)
   #+sbcl `(sb-ext:atomic-push ,value ,place)
-  #-sbcl `(push ,value ,place))
+  #+nil `(if *use-atomics?* (atomics:atomic-push ,value ,place)
+              (push ,value ,place)))
 
 ;;; Misc
 
