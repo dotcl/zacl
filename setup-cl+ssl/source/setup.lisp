@@ -1,6 +1,8 @@
 (in-package :cl-user)
 
-#+sbcl (require :sb-posix)
+;;
+;; FLAG -- remove below -- moved to ../zacl.asd.
+;; #+sbcl (require :sb-posix) 
 
 
 (defun %exe-path% ()

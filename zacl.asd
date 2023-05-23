@@ -23,7 +23,8 @@
                #:md5
                #:cl+ssl
 	       #:local-time
-	       #:cl-base64)
+	       #:cl-base64
+               #+sbcl #:sb-posix)
   :serial t
   :components ((:file "package")
                #+clozure
