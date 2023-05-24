@@ -1,1 +1,1 @@
-(:cffi)
+"(:cffi #+sbcl :sb-posix)"
