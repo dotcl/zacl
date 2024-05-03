@@ -89,7 +89,8 @@
   (incf (bytes-written stream)))
 
 (defmethod stream-write-byte ((stream zacl-socket) byte)
-  (write-byte byte (real-stream stream)))
+  (with-deadline-maybe :write-timeout (write-timeout stream)
+    (write-byte byte (real-stream stream))))
 
 (defmethod stream-write-char ((stream zacl-socket) char)
   (map nil (lambda (octet)
@@ -170,8 +171,8 @@
 
 (defmethod close ((stream zacl-socket) &key abort)
   (declare (ignore abort))
-  (socket-close (socket stream))
-  (close (real-stream stream)))
+  (close (real-stream stream))
+  (socket-close (socket stream)))
 
 (defun socket:make-socket (&key connect local-port local-host reuse-address
                              remote-port remote-host
@@ -274,7 +275,8 @@
 						ciphers
 						crl-check crl-file
 						verify
-						server-name)
+						server-name
+						deadline)
   (declare (ignore crl-check crl-file))
   (ecase stream-type
     ((:client :server)))
@@ -303,6 +305,8 @@
 			    (setf (getf arguments :verify) verify))
 			  (when server-name
 			    (setf (getf arguments :hostname) server-name)))
+			(when (eq stream-type :server)
+			  (setf (getf arguments :deadline) deadline))
 			(apply (if (eq stream-type :client)
 				   #'make-ssl-client-stream
 				   #'make-ssl-server-stream)
@@ -343,7 +347,8 @@
 			  (make-ssl-server-stream (real-stream socket)
 					      :certificate certificate
 					      :key (or key certificate)
-					      :password certificate-password))))))
+					      :password certificate-password
+					      :deadline deadline))))))
     (setf (real-stream socket) stream)
     socket))
 
@@ -369,8 +374,9 @@
                                             certificate key certificate-password
                                             verify max-depth
                                             ca-file ca-directory
-					    crl-file crl-check)
-  (declare (ignorable method verify max-depth))
+					    crl-file crl-check
+					    deadline)
+  (declare (ignorable method verify max-depth deadline))
   (when (and context
 	     (or certificate key ca-file ca-directory certificate-password crl-file crl-check))
     (error "Cannot supply both a CONTEXT and one of CERTIFICATE, KEY, CA-FILE, CA-DIRECTORY, CERTIFICATE-PASSWORD, CRL-FILE, or CRL-CHECK."))
@@ -411,7 +417,24 @@
 	     (warn "SSL v3 is deprecated and should not be used.")
 	     (setf (getf arguments :method) (cl+ssl::ssl-v3-method)))
 	    (:tlsv1
-	     (setf (getf arguments :method) (cl+ssl::ssl-TLSv1-method))))))
+	     (setf (getf arguments :method) (cl+ssl::ssl-TLSv1-method)))
+	    (:tlsv1.1
+	     (setf (getf arguments :method) (cl+ssl::ssl-TLSv1-1-method)))
+	    (:tlsv1.1+
+	     (setf (getf arguments :disabled-protocols)
+	           (list cl+ssl:+SSL-OP-NO-SSLv2+ cl+ssl:+SSL-OP-NO-SSLv3+
+	                 cl+ssl:+SSL-OP-NO-TLSv1+)))
+	    (:tlsv1.2
+	     (setf (getf arguments :method) (cl+ssl::ssl-TLSv1-2-method)))
+	    (:tlsv1.2+
+	     (setf (getf arguments :disabled-protocols)
+	           (list cl+ssl:+SSL-OP-NO-SSLv2+ cl+ssl:+SSL-OP-NO-SSLv3+
+	                 cl+ssl:+SSL-OP-NO-TLSv1+ cl+ssl:+SSL-OP-NO-TLSv1-1+)))
+	    (:tlsv1.3+
+	     (setf (getf arguments :disabled-protocols) (list CL+SSL::+SSL-OP-NO-SSLv2+ CL+SSL::+SSL-OP-NO-SSLv3+
+	                                                      CL+SSL::+SSL-OP-NO-TLSv1+ CL+SSL::+SSL-OP-NO-TLSv1-1+
+	                                                      CL+SSL::+SSL-OP-NO-TLSv1-2+)))
+	    )))
     (when ciphers
       (unless (stringp ciphers) (error "Argument CIPHERS must be a string"))
       (setf (getf arguments :cipher-list) ciphers))
@@ -532,3 +555,11 @@
 	    (remove "" (uiop:split-string subject-one-liner
 					  :separator '(#\/))
 		    :test #'string=))))
+
+(defun socket:x509-certificate-subject-alt-name (x509-certificate)
+  ;; Remarks:
+  ;; - in ACL socket:x509-certificate-subject-alt-name returns:
+  ;;   '(("DNS" . "<name1>") ("DNS" . "<nameN>") ("IP Address" . "n.n.n.n") ("IP Address" . "n:n:n:n:n:n:n:n")))
+  
+  (cl+ssl::certificate-all-alt-names x509-certificate))
+

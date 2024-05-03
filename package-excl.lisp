@@ -8,6 +8,9 @@
 (defparameter *external-format-translations*
   '((:octets . :latin1)
     (:latin1-base . :latin1)
+    (:latin1 . :latin1)
+    (:ascii . :latin1)
+    (:iso8859-1 . :latin1)
     (:utf-8 . :utf-8)
     (nil . :latin1)))
 
@@ -26,7 +29,7 @@
 
 (defvar excl:*current-case-mode* :case-insensitive-upper)
 
-(defparameter *use-atomics?* t)
+;; (defparameter *use-atomics?* t)
 
 (defmacro excl:named-function (name lambda-form)
   "Return the function produced by LAMBDA-FORM wrapped in a named
@@ -124,42 +127,23 @@ longer anonymous, but has a meaningful name name."
   `(progn ,@body))
 
 (defmacro excl:atomic-conditional-setf (place new-value old-value)
-  ;; ATTENTION: the arguments in SB-EXT:COMPARE-AND-SWAP have a different order
-  #+sbcl `(sb-ext:compare-and-swap ,place ,old-value ,new-value)
-  #-sbcl `(if *use-atomics?* (atomics:cas ,place ,old-value ,new-value)
-              (setf ,place ,new-value)))
+  `(atomics:cas ,place ,old-value ,new-value))
 
 (defmacro excl:incf-atomic (place &optional (delta 1))
-  `(if *use-atomics?* (atomics:atomic-incf ,place ,delta)
-       (incf ,place ,delta)))
-
-;;
-;; FLAG -- sb-ext:atomic-decf is crashing on SBCL when compiling proxy.cl
-;;
-#+nil
-(defmacro excl:decf-atomic (place &optional (delta 1))
-  #+sbcl `(sb-ext:atomic-decf ,place ,delta)
-  #-sbcl `(decf ,place ,delta))
+  #-sbcl `(atomics:atomic-incf ,place ,delta)
+  #+sbcl `(incf ,place ,delta))
+  
 
 (defmacro excl:decf-atomic (place &optional (delta 1))
-  `(decf ,place ,delta)
-  #+nil
-  `(if *use-atomics?* (atomics:atomic-decf ,place ,delta)
-       (decf ,place ,delta)))
+  #-sbcl `(atomics:atomic-decf ,place ,delta)
+  #+sbcl `(decf ,place ,delta))
 
 (defmacro excl:pop-atomic (place)
-  #+ccl `(pop ,place)
-  #+sbcl `(sb-ext:atomic-pop ,place)
-  ;; FLAG -- add below when version of atomics supports push/pop. 
-  #+nil
-  `(if *use-atomics?* (atomics:atomic-pop ,place)
-       (pop ,place)))
+  `(atomics:atomic-pop ,place))
 
 (defmacro excl:push-atomic (value place)
-  #+ccl `(push ,value ,place)
-  #+sbcl `(sb-ext:atomic-push ,value ,place)
-  #+nil `(if *use-atomics?* (atomics:atomic-push ,value ,place)
-              (push ,value ,place)))
+  `(atomics:atomic-push ,value ,place))
+
 
 ;;; Misc
 
@@ -273,14 +257,19 @@ values otherwise."
                     :end end))
 
 (defun excl:octets-to-string (octets &key external-format
-                                       string string-start string-end truncate
-                                       (start 0) (end (length octets)))
-  (when (or string string-start string-end truncate)
-    (error "Unsupported options given to excl:octets-to-string"))
+                                          string (string-start 0) string-end
+                                          truncate
+                                          (start 0) (end (length octets)))
+  (declare (ignore truncate))
   (octets-to-string octets
+                    :string string
                     :start start
                     :end end
-                    :encoding (translate-external-format external-format)))
+                    :string-start string-start
+                    :string-end string-end
+                    :encoding (translate-external-format external-format)
+                    :return-written-size? t))
+
 
 (defun excl:schedule-finalization (object fun)
   ;; Doesn't work; semantics differ.
@@ -444,18 +433,17 @@ values otherwise."
     (incf (zacl-simple-stream-output-pointer stream)))
   byte)
 
-
 (defmethod stream-write-string ((stream zacl-simple-stream) string &optional start end)
-  (unless start (setf start 0))
-  (unless end (setf end (length string)))
-  (let ((buffer (babel:string-to-octets string
-                                        :start start :end end
-                                        :encoding (zacl-cl:stream-external-format stream))))
-    (stream-write-sequence stream buffer 0 (length buffer))
-    string))
+  (let ((sequence (babel:string-to-octets string
+					  :start start
+					  :end end
+					  :encoding (zacl-cl:stream-external-format stream))))
+    (stream-write-sequence stream sequence 0 (length sequence)))
+  string)
 
 (defmethod stream-write-sequence ((stream zacl-simple-stream) (sequence string) start end &key)
   (stream-write-string stream sequence start end))
+
 
 #+ccl
 (defmethod stream-write-sequence ((stream zacl-simple-stream) sequence start end &key)
