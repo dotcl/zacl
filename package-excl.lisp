@@ -367,7 +367,13 @@ values otherwise."
 (defvar excl::*std-control-out-table* nil)
 
 (defclass zacl-simple-stream (fundamental-binary-output-stream
-                              fundamental-binary-input-stream)
+                              fundamental-binary-input-stream
+                              ;; read-char and read-byte, one octet at a
+                              ;; time, through the input buffer below:
+                              ;; AllegroServe reads a chunked request body
+                              ;; with read-char on its unchunking stream
+                              ;; (2026-10-08)
+                              fundamental-character-input-stream)
   (
    ;; The original SIMPLE-STREAMs in ACL contain only one buffer that is used
    ;; interchangeably between output and input in SINGLE-CHANNEL-SIMPLE-STREAMs
@@ -380,6 +386,14 @@ values otherwise."
    (output-pointer
     :initform 0
     :accessor zacl-simple-stream-output-pointer)
+   ;; What device-read last put in the input buffer (excl::buffer) and
+   ;; how much of it the byte and character readers have taken
+   (input-fill
+    :initform 0
+    :accessor zacl-simple-stream-input-fill)
+   (input-pointer
+    :initform 0
+    :accessor zacl-simple-stream-input-pointer)
 
    (excl::buffer
     :initform (make-array 1024 :element-type '(unsigned-byte 8))
@@ -411,10 +425,76 @@ values otherwise."
 (defmethod stream-element-type ((stream zacl-simple-stream))
   '(unsigned-byte 8))
 
+;;; Reading one unit at a time: the device fills the stream's own buffer,
+;;; and read-byte / read-char take it from there.  A sequence read takes
+;;; what the buffer still holds first, then asks the device for the rest.
+
+(defun zacl-simple-stream-refill (stream)
+  "Fill STREAM's input buffer from its device.  The count read, or nil
+at the end of the device."
+  (let ((n (excl:device-read stream nil 0 nil nil)))
+    (setf (zacl-simple-stream-input-pointer stream) 0
+          (zacl-simple-stream-input-fill stream) (if (minusp n) 0 n))
+    (and (plusp n) n)))
+
+(defun zacl-simple-stream-read-octets (stream sequence start end)
+  "Fill SEQUENCE (octets) from START up to END: what the input buffer
+holds first, then the device, until END or the device's end (a device
+answers one chunk, one inflated block, at a time).  The index reached."
+  (let ((at (zacl-simple-stream-take-buffered stream sequence start end)))
+    (loop while (< at end)
+          do (let ((n (excl:device-read stream sequence at end nil)))
+               (when (minusp n) (return))
+               (incf at n)))
+    at))
+
+(defun zacl-simple-stream-take-buffered (stream sequence start end)
+  "Copy what the input buffer still holds into SEQUENCE (octets) from
+START, no further than END.  The index just past what was copied."
+  (let* ((pointer (zacl-simple-stream-input-pointer stream))
+         (pending (- (zacl-simple-stream-input-fill stream) pointer))
+         (n (min pending (- end start))))
+    (when (plusp n)
+      (replace sequence (buffer stream) :start1 start :end1 (+ start n) :start2 pointer :end2 (+ pointer n))
+      (incf (zacl-simple-stream-input-pointer stream) n))
+    (+ start (max n 0))))
+
+(defmethod stream-read-byte ((stream zacl-simple-stream))
+  (when (>= (zacl-simple-stream-input-pointer stream) (zacl-simple-stream-input-fill stream))
+    (unless (zacl-simple-stream-refill stream)
+      (return-from stream-read-byte :eof)))
+  (prog1 (aref (buffer stream) (zacl-simple-stream-input-pointer stream))
+    (incf (zacl-simple-stream-input-pointer stream))))
+
+(defmethod stream-read-char ((stream zacl-simple-stream))
+  ;; one octet per character: AllegroServe reads a body with the :octets
+  ;; external format and decodes it afterwards
+  (let ((byte (stream-read-byte stream)))
+    (if (eq byte :eof) :eof (code-char byte))))
+
+(defmethod stream-unread-char ((stream zacl-simple-stream) char)
+  (declare (ignore char))
+  (when (plusp (zacl-simple-stream-input-pointer stream))
+    (decf (zacl-simple-stream-input-pointer stream)))
+  nil)
+
+(defmethod stream-read-char-no-hang ((stream zacl-simple-stream))
+  (stream-read-char stream))
+
+(defmethod stream-listen ((stream zacl-simple-stream))
+  (< (zacl-simple-stream-input-pointer stream) (zacl-simple-stream-input-fill stream)))
+
+(defmethod stream-clear-input ((stream zacl-simple-stream))
+  (setf (zacl-simple-stream-input-pointer stream) 0
+        (zacl-simple-stream-input-fill stream) 0)
+  nil)
+
 (defmethod stream-read-sequence ((stream zacl-simple-stream) sequence start end
                                  &key &allow-other-keys)
   (unless start (setf start 0))
   (unless end (setf end (length sequence)))
+  (unless (stringp sequence)
+    (return-from stream-read-sequence (zacl-simple-stream-read-octets stream sequence start end)))
   (if (stringp sequence)
       (let ((result (excl:device-read stream nil 0 nil nil))
             (buffer (buffer stream )))
@@ -525,6 +605,8 @@ values otherwise."
 (defmethod ccl:stream-read-vector ((stream zacl-simple-stream) sequence start end)
   (unless start (setf start 0))
   (unless end (setf end (length sequence)))
+  (unless (stringp sequence)
+    (return-from ccl:stream-read-vector (zacl-simple-stream-read-octets stream sequence start end)))
   (if (stringp sequence)
       (let ((result (excl:device-read stream nil 0 nil nil))
             (buffer (buffer stream )))

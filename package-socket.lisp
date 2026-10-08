@@ -4,22 +4,71 @@
 
 (defparameter *print-hostname-in-stream* nil)
 
+;;; Addresses: an IPv4 address is a 32-bit integer, as Allegro has it,
+;;; and an IPv6 address a 128-bit one (2026-10-08), so that what a
+;;; dual-stack listening socket reports for a peer goes through the
+;;; same functions; the text forms tell them apart.
+
+(defvar *ipv6?* t
+  "Whether a passive socket asked for on no particular host listens on
+the IPv6 wildcard, which takes IPv4 connections too; a host without
+IPv6 falls back to IPv4.")
+
 (defun ip-address-integer (ip-address)
-  (check-type ip-address (simple-array * (4)) "octet vector")
-  (logand #xFFFFFFFF
-          (logior (ash (aref ip-address 0) 24)
-                  (ash (aref ip-address 1) 16)
-                  (ash (aref ip-address 2)  8)
-                  (ash (aref ip-address 3)  0))))
+  "An octet vector of 4 (IPv4) or 16 (IPv6) as one integer."
+  (check-type ip-address (simple-array * (*)) "octet vector")
+  (unless (member (length ip-address) '(4 16))
+    (error "An IP address of ~d octets." (length ip-address)))
+  (let ((integer 0))
+    (loop for byte across ip-address do (setq integer (logior (ash integer 8) byte)))
+    integer))
+
+(defun ipv6-integer-p (integer)
+  (> integer #xFFFFFFFF))
+
+(defun ipv4-mapped-p (integer)
+  "An IPv6 address of the form ::ffff:a.b.c.d, as a dual-stack socket
+reports an IPv4 peer."
+  (and (ipv6-integer-p integer) (= (ash integer -32) #xFFFF)))
 
 (defun integer-ip-address (integer)
-  (check-type integer (unsigned-byte 32))
-  (let ((ip-address (make-array 4 :element-type '(unsigned-byte 8))))
-    (setf (aref ip-address 0) (ldb (byte 8 24) integer)
-          (aref ip-address 1) (ldb (byte 8 16) integer)
-          (aref ip-address 2) (ldb (byte 8  8) integer)
-          (aref ip-address 3) (ldb (byte 8  0) integer))
-    ip-address))
+  "INTEGER as an octet vector: 4 octets for an IPv4 address, 16 for IPv6."
+  (check-type integer (unsigned-byte 128))
+  (let* ((n (if (ipv6-integer-p integer) 16 4))
+         (ip-address (make-array n :element-type '(unsigned-byte 8))))
+    (dotimes (i n ip-address)
+      (setf (aref ip-address i) (ldb (byte 8 (* 8 (- n 1 i))) integer)))))
+
+(defun ipv6-integer-text (integer)
+  "INTEGER (128 bits) in the usual text form, the longest run of zero
+groups elided; a mapped IPv4 address as ::ffff:a.b.c.d."
+  (if (ipv4-mapped-p integer)
+      (format nil "::ffff:~a" (socket:ipaddr-to-dotted (ldb (byte 32 0) integer)))
+      (let* ((groups (loop for i from 7 downto 0 collect (ldb (byte 16 (* 16 i)) integer)))
+             (best-start nil) (best-length 0))
+        ;; the longest run of zeros, of at least two groups
+        (loop with start = nil
+              for group in (append groups (list -1)) for i from 0
+              do (cond ((and (zerop group) (null start)) (setq start i))
+                       ((and (not (zerop group)) start)
+                        (when (> (- i start) (max best-length 1))
+                          (setq best-start start best-length (- i start)))
+                        (setq start nil))))
+        (with-output-to-string (out)
+          (loop for group in groups for i from 0
+                do (cond ((and best-start (= i best-start)) (write-string "::" out))
+                         ((and best-start (< best-start i (+ best-start best-length))))
+                         (t (unless (or (zerop i) (and best-start (= i (+ best-start best-length))))
+                              (write-char #\: out))
+                            (format out "~(~x~)" group))))))))
+
+(defun wildcard-host (host)
+  "The host to listen on for HOST as make-socket was given it: with
+*ipv6?*, no host or the IPv4 wildcard becomes the IPv6 wildcard, which
+takes both families."
+  (if (and *ipv6?* (or (null host) (equal host "0.0.0.0") (eql host 0)))
+      "::"
+      host))
 
 
 (defclass zacl-socket (fundamental-binary-output-stream
@@ -171,7 +220,10 @@
 (defmethod close ((stream zacl-socket) &key abort)
   (declare (ignore abort))
   (socket-close (socket stream))
-  (close (real-stream stream)))
+  ;; a passive (listening) socket has no stream
+  (when (real-stream stream)
+    (close (real-stream stream)))
+  t)
 
 (defun socket:make-socket (&key connect local-port local-host reuse-address
                              remote-port remote-host
@@ -182,10 +234,18 @@
   (ecase connect
     (:passive
      (let ((socket
-            (socket-listen local-host (or local-port 0)
-                           :reuseaddress reuse-address
-                           :element-type '(unsigned-byte 8)
-                           :backlog backlog)))
+             (flet ((listen-on (host)
+                      (socket-listen host (or local-port 0)
+                                     :reuseaddress reuse-address
+                                     :element-type '(unsigned-byte 8)
+                                     :backlog backlog)))
+               (let ((host (wildcard-host local-host)))
+                 (if (equal host local-host)
+                     (listen-on host)
+                     ;; the IPv6 wildcard first; a host without IPv6
+                     ;; (a container, often) refuses it
+                     (handler-case (listen-on host)
+                       (error () (listen-on local-host))))))))
        (make-instance 'zacl-socket
                       :socket socket)))
 
@@ -217,13 +277,30 @@
   (ip-address-integer (get-peer-address (socket socket))))
 
 (defun socket:ipaddr-to-dotted (ip-integer)
-  (format nil "~A.~A.~A.~A"
-          (ldb (byte 8 24) ip-integer)
-          (ldb (byte 8 16) ip-integer)
-          (ldb (byte 8  8) ip-integer)
-          (ldb (byte 8  0) ip-integer)))
+  "The text of an address: dotted for IPv4, colon groups for IPv6."
+  (if (ipv6-integer-p ip-integer)
+      (ipv6-integer-text ip-integer)
+      (format nil "~A.~A.~A.~A"
+              (ldb (byte 8 24) ip-integer)
+              (ldb (byte 8 16) ip-integer)
+              (ldb (byte 8  8) ip-integer)
+              (ldb (byte 8  0) ip-integer))))
 
 (defun socket:dotted-to-ipaddr (dotted &key errorp)
+  (when (find #\: dotted)
+    ;; an IPv6 address in text; ::ffff:a.b.c.d carries an IPv4 address
+    ;; in its low 32 bits
+    (let* ((colon (position #\: dotted :from-end t))
+           (mapped? (find #\. dotted :start colon))
+           (groups (if mapped? (concatenate 'string (subseq dotted 0 (1+ colon)) "0:0") dotted))
+           (vector (ignore-errors (usocket:ipv6-host-to-vector groups)))
+           (low (and mapped? (socket:dotted-to-ipaddr (subseq dotted (1+ colon)) :errorp errorp))))
+      (cond ((and vector (or (not mapped?) low))
+             (return-from socket:dotted-to-ipaddr
+               (logior (ip-address-integer (coerce vector '(simple-array (unsigned-byte 8) (16))))
+                       (or low 0))))
+            (errorp (error "Malformed IPv6 address: ~A" dotted))
+            (t (return-from socket:dotted-to-ipaddr nil)))))
   (let ((result 0)
         (length (length dotted))
         (i 0)
@@ -252,19 +329,23 @@
   `(progn ,@body))
 
 (defun socket:ipaddr-to-hostname (ipaddr)
-  #+sbcl (sb-bsd-sockets:host-ent-name
-	  (sb-bsd-sockets:get-host-by-address
-	   (if (typep ipaddr 'string)
-	       (sb-bsd-sockets:make-inet-address ipaddr)
-	       ipaddr)))
-  #+ccl (ipaddr-to-hostname ipaddr))
+  (if (and (integerp ipaddr) (ipv6-integer-p ipaddr))
+      ;; no reverse lookup for IPv6 here: the address itself
+      (socket:ipaddr-to-dotted ipaddr)
+      (progn
+        #+sbcl (sb-bsd-sockets:host-ent-name
+                (sb-bsd-sockets:get-host-by-address
+                 (if (typep ipaddr 'string)
+                     (sb-bsd-sockets:make-inet-address ipaddr)
+                     ipaddr)))
+        #+ccl (ipaddr-to-hostname ipaddr))))
 
 (defun socket:lookup-hostname (name)
   #+ccl (lookup-hostname name)
-  ;;
-  ;; FLAG -- this assumes IPv4 - fix to work with IPv6 also. 
-  ;;
-  #+sbcl (format nil "~{~a~^.~}" (coerce (get-host-by-name name) 'list)))
+  #+sbcl (let ((address (get-host-by-name name)))
+           (if (= (length address) 16)
+               (usocket:vector-to-ipv6-host address)
+               (format nil "~{~a~^.~}" (coerce address 'list)))))
 
 (defun make-ssl-stream (socket stream-type &key context
 						method
