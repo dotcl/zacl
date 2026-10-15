@@ -2,5 +2,7 @@
 
 (asdf:defsystem #:zacl-tests
   :serial t
-  :depends-on (#:zacl #:fiveam #:aserve)
+  ;; The Quicklisp release of AllegroServe defines the system ZASERVE; no
+  ;; system named ASERVE exists any more.
+  :depends-on (#:zacl #:fiveam #:zaserve)
   :components ((:file "tests")))

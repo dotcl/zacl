@@ -12,8 +12,20 @@
 (defun mp:make-process-lock (&key name)
   (make-lock name))
 
+;;; Allegro's without-scheduling keeps every other thread from running
+;;; for the body, and AllegroServe leans on it as a critical section
+;;; around its shared free lists (the header parse objects in
+;;; parse.cl, the client's header-line buffers, the proxy's) in its
+;;; non-SMP forms, which are the ones this port compiles.  A plain
+;;; progn here let two request threads pop the same parse object and
+;;; corrupt each other's header parsing: a few requests in a thousand
+;;; answered an empty 400 or died with an array index out of bounds
+;;; under thirty concurrent streams.  One lock, held for the body, is
+;;; the exclusion the macro promised; the bodies are a push or a pop.
+(defvar *scheduling-lock* (bordeaux-threads:make-recursive-lock "zacl without-scheduling"))
+
 (defmacro mp:without-scheduling (&body body)
-  `(progn ,@body))
+  `(bordeaux-threads:with-recursive-lock-held (*scheduling-lock*) ,@body))
 
 
 ;;; Gates

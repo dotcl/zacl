@@ -147,8 +147,13 @@ longer anonymous, but has a meaningful name name."
   `(if *use-atomics?* (atomics:atomic-decf ,place ,delta)
        (decf ,place ,delta)))
 
+;; AllegroServe's fixed-size buffer pools (the header blocks among
+;; them) are pushed and popped with these; a plain push or pop on
+;; Clozure CL let two request threads take the same block.  Clozure CL
+;; has no atomic list push or pop, so the lock behind
+;; mp:without-scheduling (package-mp.lisp) stands in.
 (defmacro excl:pop-atomic (place)
-  #+ccl `(pop ,place)
+  #+(or ccl egcl) `(mp:without-scheduling (pop ,place))
   #+sbcl `(sb-ext:atomic-pop ,place)
   ;; FLAG -- add below when version of atomics supports push/pop. 
   #+nil
@@ -156,7 +161,7 @@ longer anonymous, but has a meaningful name name."
        (pop ,place)))
 
 (defmacro excl:push-atomic (value place)
-  #+ccl `(push ,value ,place)
+  #+(or ccl egcl) `(mp:without-scheduling (push ,value ,place))
   #+sbcl `(sb-ext:atomic-push ,value ,place)
   #+nil `(if *use-atomics?* (atomics:atomic-push ,value ,place)
               (push ,value ,place)))
@@ -542,7 +547,7 @@ START, no further than END.  The index just past what was copied."
   (excl:device-write stream sequence start end nil)
   sequence)
 
-#+sbcl
+#+(or sbcl egcl)
 (defmethod stream-write-sequence ((stream zacl-simple-stream) sequence start end &key)
   (let ((buffer (zacl-simple-stream-output-buffer stream)))
     ;; no space in buffer?

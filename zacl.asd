@@ -30,6 +30,8 @@
                (:file "clozure-specific")
                #+sbcl
                (:file "sbcl-specific")
+               #+egcl
+               (:file "egcl-specific")
                #-clozure
                (:file "portable-process")
                #+clozure

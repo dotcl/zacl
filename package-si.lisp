@@ -2,8 +2,11 @@
 
 (in-package #:zacl)
 
+;; the same exclusion as mp:without-scheduling (package-mp.lisp):
+;; without-interrupts on Clozure CL or SBCL defers interrupts to this
+;; thread and keeps no other thread out
 (defmacro si:without-scheduling (&body body)
-  `(excl:without-interrupts ,@body))
+  `(mp:without-scheduling ,@body))
 
 (defun si:global-symbol-value (symbol)
   #+ccl
