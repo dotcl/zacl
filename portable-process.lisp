@@ -134,8 +134,17 @@
 (defmethod kill ((process process))
   (setf (state process) :killed)
   (when (thread process)
+    ;; EGCL has no thread interruption (its bordeaux-threads port signals
+    ;; from INTERRUPT-THREAD).  Wake a process parked on its run-reasons
+    ;; condition variable instead, so WAIT-UNTIL-RUNNABLE returns and the
+    ;; wrapper loop sees the :killed state; a process blocked in accept
+    ;; ends when its caller closes the socket, as AllegroServe's SHUTDOWN
+    ;; does right after killing the accept thread.
+    #-egcl
     (interrupt-thread (thread process)
-                      (lambda () (throw 'killed nil))))
+                      (lambda () (throw 'killed nil)))
+    #+egcl
+    (condition-notify (reasons-condition-variable process)))
   (remove-from-all-processes process)
   process)
 
@@ -150,7 +159,9 @@
 
 (defmethod wait-until-runnable ((process process))
   (loop
-    (cond ((run-reasons process)
+    ;; A killed process returns too: on EGCL that is how KILL reaches a
+    ;; waiting process (no interruption), and elsewhere the THROW lands first.
+    (cond ((or (run-reasons process) (killedp process))
            (return))
           (t
            (let ((lock (reasons-lock process)))
