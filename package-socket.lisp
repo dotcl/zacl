@@ -117,10 +117,23 @@ takes both families."
     (sb-sys:with-deadline (:seconds seconds)
       (funcall body-fn))))
 
+;; CCL and EGCL keep the timeout on the stream itself (see SOCKET-CONTROL),
+;; so only their timeout condition needs turning into Allegro's.
+#+(or ccl egcl)
+(defun call-translating-timeout (identifier body-fn)
+  (handler-bind
+      ((#+ccl (or ccl:input-timeout ccl:output-timeout) #+egcl egcl-ext:io-timeout
+        (lambda (e)
+          (declare (ignore e))
+          (error 'excl:socket-error :identifier identifier))))
+    (funcall body-fn)))
+
 (defmacro with-deadline-maybe (identifier seconds &body body)
-  #-sbcl (declare (ignore identifier seconds))
-  #-sbcl `(progn ,@body)
-  #+sbcl `(call-with-deadline-maybe ,identifier ,seconds (lambda () ,@body)))
+  #-sbcl (declare (ignore seconds))
+  #-(or sbcl ccl egcl) (declare (ignore identifier))
+  #+sbcl `(call-with-deadline-maybe ,identifier ,seconds (lambda () ,@body))
+  #+(or ccl egcl) `(call-translating-timeout ,identifier (lambda () ,@body))
+  #-(or sbcl ccl egcl) `(progn ,@body))
 
 (defmethod print-object ((object zacl-socket) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -465,13 +478,40 @@ takes both families."
 
 (defun socket:socket-control (socket &key (read-timeout nil read-timeout-p)
 					  (write-timeout nil write-timeout-p))
-  #-sbcl (declare (ignore socket read-timeout write-timeout read-timeout-p write-timeout-p))
+  "Set SOCKET's read and write timeouts in seconds, NIL for none, as on
+Allegro CL: a read or write that runs past one signals EXCL:SOCKET-ERROR."
+  ;; AllegroServe relies on the read timeout to drop a client that stalls
+  ;; inside a request body; without it the worker thread waited for CCL's
+  ;; five-minute response timeout, and on EGCL forever.  EGCL has a
+  ;; receive timeout but no send timeout yet.
+  #-(or sbcl ccl egcl) (declare (ignore socket read-timeout write-timeout read-timeout-p write-timeout-p))
+  #+egcl (declare (ignore write-timeout write-timeout-p))
   #+sbcl
   (when read-timeout-p
     (setf (read-timeout socket) read-timeout))
   #+sbcl
   (when write-timeout-p
-    (setf (write-timeout socket) write-timeout)))
+    (setf (write-timeout socket) write-timeout))
+  #+(or ccl egcl)
+  (let ((stream (tcp-stream socket)))
+    (when stream
+      #+ccl
+      (when read-timeout-p
+        (setf (ccl:stream-input-timeout stream) read-timeout))
+      #+ccl
+      (when write-timeout-p
+        (setf (ccl:stream-output-timeout stream) write-timeout))
+      #+egcl
+      (when read-timeout-p
+        (egcl::%socket-read-timeout stream (and read-timeout (plusp read-timeout)
+                                                (ceiling (* read-timeout 1000))))))))
+
+#+(or ccl egcl)
+(defun tcp-stream (socket)
+  "SOCKET's own TCP stream, beneath any TLS layer; NIL for a listener."
+  (let ((usocket (socket socket)))
+    (when (typep usocket 'stream-usocket)
+      (socket-stream usocket))))
 
 (defun make-ssl-context (&key method
 			      certificate
