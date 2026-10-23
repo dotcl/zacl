@@ -26,8 +26,6 @@
 
 (defvar excl:*current-case-mode* :case-insensitive-upper)
 
-(defparameter *use-atomics?* t)
-
 (defmacro excl:named-function (name lambda-form)
   "Return the function produced by LAMBDA-FORM wrapped in a named
 function object. Useful for debugging, as the function object is no
@@ -123,15 +121,25 @@ longer anonymous, but has a meaningful name name."
 (defmacro excl::atomically (&body body)
   `(progn ,@body))
 
+;; These two used the Atomics library, which nothing else here needs: the
+;; implementations' own compare-and-swap where there is one, and the lock
+;; behind mp:without-scheduling (package-mp.lisp) for the rest.
 (defmacro excl:atomic-conditional-setf (place new-value old-value)
-  ;; ATTENTION: the arguments in SB-EXT:COMPARE-AND-SWAP have a different order
-  #+sbcl `(sb-ext:compare-and-swap ,place ,old-value ,new-value)
-  #-sbcl `(if *use-atomics?* (atomics:cas ,place ,old-value ,new-value)
-              (setf ,place ,new-value)))
+  "Store NEW-VALUE in PLACE if PLACE holds OLD-VALUE (by EQ); true if it did,
+as on Allegro CL."
+  ;; ATTENTION: the native operators take the old value before the new one.
+  (let ((old (gensym "OLD")))
+    (declare (ignorable old))
+    #+sbcl `(let ((,old ,old-value)) (eq ,old (sb-ext:compare-and-swap ,place ,old ,new-value)))
+    #+ccl `(ccl::conditional-store ,place ,old-value ,new-value)
+    #+egcl `(let ((,old ,old-value)) (eq ,old (egcl-ext:cas ,place ,old ,new-value)))
+    #-(or sbcl ccl egcl)
+    `(mp:without-scheduling
+       (when (eq ,place ,old-value) (setf ,place ,new-value) t))))
 
 (defmacro excl:incf-atomic (place &optional (delta 1))
-  `(if *use-atomics?* (atomics:atomic-incf ,place ,delta)
-       (incf ,place ,delta)))
+  "Add DELTA to PLACE under zacl's scheduling lock; the new value."
+  `(mp:without-scheduling (incf ,place ,delta)))
 
 ;;
 ;; FLAG -- sb-ext:atomic-decf is crashing on SBCL when compiling proxy.cl
@@ -142,10 +150,8 @@ longer anonymous, but has a meaningful name name."
   #-sbcl `(decf ,place ,delta))
 
 (defmacro excl:decf-atomic (place &optional (delta 1))
-  `(decf ,place ,delta)
-  #+nil
-  `(if *use-atomics?* (atomics:atomic-decf ,place ,delta)
-       (decf ,place ,delta)))
+  "Subtract DELTA from PLACE under zacl's scheduling lock; the new value."
+  `(mp:without-scheduling (decf ,place ,delta)))
 
 ;; AllegroServe's fixed-size buffer pools (the header blocks among
 ;; them) are pushed and popped with these; a plain push or pop on
@@ -154,17 +160,11 @@ longer anonymous, but has a meaningful name name."
 ;; mp:without-scheduling (package-mp.lisp) stands in.
 (defmacro excl:pop-atomic (place)
   #+(or ccl egcl) `(mp:without-scheduling (pop ,place))
-  #+sbcl `(sb-ext:atomic-pop ,place)
-  ;; FLAG -- add below when version of atomics supports push/pop. 
-  #+nil
-  `(if *use-atomics?* (atomics:atomic-pop ,place)
-       (pop ,place)))
+  #+sbcl `(sb-ext:atomic-pop ,place))
 
 (defmacro excl:push-atomic (value place)
   #+(or ccl egcl) `(mp:without-scheduling (push ,value ,place))
-  #+sbcl `(sb-ext:atomic-push ,value ,place)
-  #+nil `(if *use-atomics?* (atomics:atomic-push ,value ,place)
-              (push ,value ,place)))
+  #+sbcl `(sb-ext:atomic-push ,value ,place))
 
 ;;; Misc
 
