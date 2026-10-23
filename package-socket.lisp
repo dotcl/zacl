@@ -16,7 +16,11 @@ IPv6 falls back to IPv4.")
 
 (defun ip-address-integer (ip-address)
   "An octet vector of 4 (IPv4) or 16 (IPv6) as one integer."
-  (check-type ip-address (simple-array * (*)) "octet vector")
+  ;; Any vector, not only a simple one: usocket's CCL backend reports the
+  ;; IPv4 peer of a dual-stack listener as a vector displaced into the last
+  ;; four octets of the IPv4-mapped IPv6 address, and a SIMPLE-ARRAY check
+  ;; refused it, failing every accept from an IPv4 client.
+  (check-type ip-address vector "octet vector")
   (unless (member (length ip-address) '(4 16))
     (error "An IP address of ~d octets." (length ip-address)))
   (let ((integer 0))
